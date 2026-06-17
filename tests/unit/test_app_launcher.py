@@ -12,13 +12,10 @@ import pytest
 
 from phone_agent.device.android.app_launcher import (
     AppLauncher,
-    fuzzy_match,
     is_package_like,
 )
 from phone_agent.device.base import OpenAppNeedsVisual
 
-
-# ---------- 纯函数测试 ----------
 
 def test_is_package_like_positive():
     assert is_package_like("tv.danmaku.bili")
@@ -33,28 +30,10 @@ def test_is_package_like_negative():
     assert not is_package_like("")
 
 
-def test_fuzzy_match_substring():
-    candidates = ["tv.danmaku.bili", "com.taobao.taobao", "com.tencent.mm"]
-    assert fuzzy_match("bili", candidates) == "tv.danmaku.bili"
-
-
-def test_fuzzy_match_no_hit_returns_none():
-    candidates = ["com.unrelated.foo", "com.unrelated.bar"]
-    assert fuzzy_match("xxxxxxx", candidates) is None
-
-
-def test_fuzzy_match_last_segment():
-    candidates = ["com.taobao.taobao", "com.taobao.trip"]
-    assert fuzzy_match("trip", candidates) == "com.taobao.trip"
-
-
-# ---------- AppLauncher 集成 ----------
-
 @pytest.fixture
 def launched(tmp_path, monkeypatch):
     """每个测试用临时 home 目录避免污染真实 learned cache。"""
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    # 重新导入以重置 module-level LEARNED_CACHE_PATH
     import importlib
 
     from phone_agent.device.android import app_launcher
@@ -74,28 +53,33 @@ def launched(tmp_path, monkeypatch):
 
 
 def test_l1_static_table_hit(launched):
-    launcher, started, home, _, _ = launched
+    """L1 静态表命中:启动成功,但因为没有视觉兜底参与,不写 cache。"""
+    launcher, started, home, _, app_launcher_module = launched
     pkg = launcher.open("哔哩哔哩")
     assert pkg == "tv.danmaku.bili"
     assert started == ["tv.danmaku.bili"]
     assert home == []
+    assert not app_launcher_module.LEARNED_CACHE_PATH.exists()
+
+
+def test_l1_alias_overseas_to_domestic(launched):
+    """模型给海外 package 时,alias 表能找到国内替代。"""
+    launcher, started, _, installed, _ = launched
+    installed.append("com.ss.android.ugc.aweme")
+    pkg = launcher.open("com.zhiliaoapp.musically")
+    assert pkg == "com.ss.android.ugc.aweme"
+    assert started == ["com.ss.android.ugc.aweme"]
 
 
 def test_l2_package_direct(launched):
-    launcher, started, home, _, _ = launched
+    launcher, started, _, _, _ = launched
     pkg = launcher.open("com.foo.bar")
     assert pkg == "com.foo.bar"
     assert started == ["com.foo.bar"]
 
 
-def test_l3_fuzzy_match(launched):
-    launcher, started, home, _, _ = launched
-    pkg = launcher.open("taobao")
-    assert pkg == "com.taobao.taobao"
-    assert started == ["com.taobao.taobao"]
-
-
-def test_l4_visual_fallback_raises_and_goes_home(launched):
+def test_unknown_app_raises_visual_fallback(launched):
+    """L1/L2/alias 都未命中时,直接 raise OpenAppNeedsVisual + go_home。"""
     launcher, started, home, _, _ = launched
     with pytest.raises(OpenAppNeedsVisual):
         launcher.open("某个完全不存在的应用xxxyyy")
@@ -103,10 +87,53 @@ def test_l4_visual_fallback_raises_and_goes_home(launched):
     assert home == [True]
 
 
-def test_learned_cache_persists(launched):
+def test_no_fuzzy_match_anymore(launched):
+    """关键回归:模糊匹配已删除,不应再把不相关的 com.xxx 误匹配。
+
+    历史 bug:com.zhiliaoapp.musically 曾经被 fuzzy 误配到 com.biquge.ebook.app。
+    现在 alias 表会把 musically 指向 com.ss.android.ugc.aweme,
+    但本测试设备没装那个,所以应直接落到视觉兜底,不应启动笔趣阁。
+    """
+    launcher, started, home, installed, _ = launched
+    installed.append("com.biquge.ebook.app")
+    with pytest.raises(OpenAppNeedsVisual):
+        launcher.open("com.zhiliaoapp.musically")
+    assert "com.biquge.ebook.app" not in started
+    assert started == []
+    assert home == [True]
+
+
+def test_learn_from_visual_writes_cache(launched):
+    """视觉兜底成功后,Runner 会调用 learn_from_visual 回写 cache。"""
+    launcher, _, _, _, app_launcher_module = launched
+    launcher.learn_from_visual("超级冷门app", "com.weird.app")
+    cache = json.loads(app_launcher_module.LEARNED_CACHE_PATH.read_text(encoding="utf-8"))
+    assert cache["超级冷门app"] == "com.weird.app"
+
+
+def test_learned_cache_used_on_next_open(launched):
+    """learn 之后,下次 open 同样的请求,直接走 learned 路径。"""
+    launcher, started, _, installed, _ = launched
+    installed.append("com.weird.app")
+    launcher.learn_from_visual("超级冷门app", "com.weird.app")
+    pkg = launcher.open("超级冷门app")
+    assert pkg == "com.weird.app"
+    assert started == ["com.weird.app"]
+
+
+def test_learn_from_visual_ignores_empty(launched):
+    """空 request 或空 package 不应写入 cache。"""
+    launcher, _, _, _, app_launcher_module = launched
+    launcher.learn_from_visual("", "com.x")
+    launcher.learn_from_visual("x", "")
+    assert not app_launcher_module.LEARNED_CACHE_PATH.exists()
+
+
+def test_normal_launch_does_not_auto_learn(launched):
+    """关键设计:L1/L2/alias 启动成功不应写 cache,只有 learn_from_visual 才写。"""
     launcher, _, _, installed, app_launcher_module = launched
+    installed.append("com.ss.android.ugc.aweme")
     launcher.open("哔哩哔哩")
-    cache_path = app_launcher_module.LEARNED_CACHE_PATH
-    assert cache_path.exists()
-    cache = json.loads(cache_path.read_text(encoding="utf-8"))
-    assert cache["哔哩哔哩"] == "tv.danmaku.bili"
+    launcher.open("com.zhiliaoapp.musically")
+    launcher.open("com.foo.bar")
+    assert not app_launcher_module.LEARNED_CACHE_PATH.exists()
