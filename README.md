@@ -50,7 +50,7 @@ python -m seetouch run "打开抖音我的喜欢里搜索跳舞的视频"
 ### 安装
 
 ```bash
-git clone https://github.com/YidaYang/seetouch.git
+git clone https://github.com/seetouch-agent/seetouch.git
 cd seetouch
 python -m venv .venv
 
@@ -349,8 +349,8 @@ ruff format seetouch/
 
 ## 联系方式
 
-- **Issues**: [GitHub Issues](https://github.com/YidaYang/seetouch/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YidaYang/seetouch/discussions)
+- **Issues**: [GitHub Issues](https://github.com/seetouch-agent/seetouch/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/seetouch-agent/seetouch/discussions)
 
 ---
 
