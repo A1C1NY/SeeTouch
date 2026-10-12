@@ -1,361 +1,186 @@
 # SeeTouch
 
-<div align="center">
+Vision-driven mobile GUI agent that sees your screen and operates your phone via natural language.
 
-**Vision-driven mobile GUI agent that sees your screen and operates your phone via natural language.**
+SeeTouch 通过屏幕截图和视觉语言模型（VLM）理解手机界面，将自然语言指令转换为 Android 操作。项目仓库：[seetouch-agent/SeeTouch](https://github.com/seetouch-agent/SeeTouch)。
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-83%20passing-brightgreen.svg)](#测试)
+## 当前支持的运行方式
 
-[English](README_EN.md) | 简体中文
+| 入口 | 设备控制 | 当前推理后端 | 敏感动作确认 |
+|---|---|---|---|
+| PC 命令行 `run` | ADB + uiautomator2 | 默认 Gemini，可用 `--reasoner doubao` 切换 | 命中关键词规则后在终端确认 |
+| PC Web 调试器 `debug` | ADB + uiautomator2 | 固定 Doubao，尚无模型选择参数 | **当前自动批准，尚未接入交互确认** |
+| Android 独立 App | 无障碍服务 + Kotlin/Python 桥接 | 固定 Doubao，通过 App 设置配置 | App 内确认，5 分钟超时拒绝 |
 
-</div>
+Android App 不依赖电脑执行任务，但仍需联网调用云端模型。构建与安装见 [Android 指南](android/README.md)。
 
----
+本说明以 2026-10-12 检查的 `main`（代码基线 `de755f7`）为准；其他分支的能力不视为已合并功能。
 
-## 简介
+## PC 快速开始
 
-SeeTouch 是一个基于视觉语言模型（VLM）的 Android GUI 自动化工具，能够理解屏幕内容并将自然语言指令转换为手机操作序列。
-
-### 核心特性
-
-- **自然语言控制** — 用中文描述任务，自动完成跨应用操作
-- **视觉理解** — 支持 Gemini / Doubao Vision 多模态模型识别控件、文本、广告等复杂场景  
-- **智能启动** — 应用名一等公民策略，自动适配中文 app 名称  
-- **安全防护** — 支付、下单等敏感操作自动拦截并请求确认  
-- **模块化架构** — 设备层抽象支持扩展到 Web、桌面等平台
-
-### 典型场景
+需要 Python 3.10+、Android Platform Tools（`adb`），以及已开启 USB 调试并授权电脑的 Android 设备。先用 `adb devices` 确认连接状态。
 
 ```bash
-python -m seetouch run "打开抖音"
-python -m seetouch run "在哔哩哔哩搜索采莲曲"
-python -m seetouch run "打开抖音我的喜欢里搜索跳舞的视频"
-```
-
----
-
-## 快速开始
-
-### 环境要求
-
-- Python 3.10+
-- Android 设备（开启 USB 调试）或模拟器
-- ADB 工具
-- **推理模型**（二选一）：
-  - **Gemini API**（推荐）— 免费，无需信用卡，15 RPM / 500 RPD
-  - Doubao Vision — 火山引擎 API Key
-
-### 安装
-
-```bash
-git clone https://github.com/seetouch-agent/seetouch.git
+git clone https://github.com/seetouch-agent/SeeTouch.git seetouch
 cd seetouch
 python -m venv .venv
-
-# Windows
-.\.venv\Scripts\Activate.ps1
-# macOS/Linux
-source .venv/bin/activate
-
-pip install -e .
 ```
 
-### 配置 Android 设备
+Windows PowerShell：
 
-1. **连接设备**  
-   USB 连接手机或配置无线 ADB：
-   ```bash
-   adb devices
-   ```
-   应能看到你的设备列表。
+```powershell
+.\.venv\Scripts\Activate.ps1
+Copy-Item .env.example .env
+```
 
-2. **初始化 uiautomator2**  
-   自动在手机上安装 atx-agent 服务：
-   ```bash
-   python -m uiautomator2 init
-   ```
-   > **注意（MIUI 用户）**：末尾可能报 ADBKeyboard.apk 安装失败，但不影响主流程（产品使用原生 UIAutomator API 输入中文）。
-
-3. **开发者选项**  
-   确保已开启：USB 调试 / USB 调试(安全设置) / USB 安装
-
-### 配置 API Key
-
-#### 方式 1: Gemini API（推荐，免费）
-
-1. 前往 [Google AI Studio](https://aistudio.google.com) 获取免费 API Key
-2. 创建 `.env` 文件：
+macOS / Linux：
 
 ```bash
+source .venv/bin/activate
 cp .env.example .env
 ```
 
-3. 编辑 `.env`：
-```ini
-# Gemini API (免费，15 RPM / 500 RPD)
-GEMINI_API_KEY=你的_Gemini_API_Key
-GEMINI_MODEL_ID=gemini-3.1-flash-lite  # 可选，默认即此模型
+安装依赖，然后在本地 `.env` 中填入所选服务的 API key：
+
+```bash
+python -m pip install -e .
 ```
 
-详细配置参考：[docs/gemini-integration.md](docs/gemini-integration.md)
+### Gemini：CLI 默认后端
 
-#### 方式 2: Doubao Vision
+从 [Google AI Studio](https://aistudio.google.com/) 获取你有权使用的凭据。以下模型名是代码中的默认值，实际可用性、收费和配额以你的 API 项目为准；项目不保证固定免费额度。
 
-```ini
-# 火山引擎 Doubao Vision
-VLM_API_KEY=你的火山方舟_API_Key
+```dotenv
+GEMINI_API_KEY=replace-with-your-key
+GEMINI_MODEL_ID=gemini-3.1-flash-lite
+```
+
+```bash
+python -m seetouch run "打开设置"
+python -m seetouch run "在哔哩哔哩搜索采莲曲" --reasoner gemini
+```
+
+配置与实现边界见 [Gemini 指南](docs/gemini-integration.md)。
+
+### Doubao：CLI 可选，调试器和 Android App 使用
+
+```dotenv
+VLM_API_KEY=replace-with-your-key
 DOUBAO_MODEL_ID=doubao-seed-1-6-vision-250815
 DOUBAO_API_URL=https://ark.cn-beijing.volces.com/api/v3
-SEETOUCH_THINKING_MODE=enabled  # enabled|disabled
+SEETOUCH_THINKING_MODE=enabled
 ```
-
-#### 可选配置
-
-```ini
-SEETOUCH_DEVICE_SERIAL=       # 多设备时指定
-SEETOUCH_MAX_STEPS=45         # 单任务最大步数
-```
-
-### 自检
-
-运行诊断脚本检查环境：
-```bash
-python -m seetouch.scripts.doctor
-```
-
-### 运行任务
-
-默认使用 Gemini（推荐）：
 
 ```bash
-python -m seetouch run "打开抖音"
-python -m seetouch run "在哔哩哔哩搜索采莲曲"
+python -m seetouch run "打开设置" --reasoner doubao
 ```
 
-指定推理模型：
+`SEETOUCH_THINKING_MODE` 控制 Doubao，Gemini 适配器不读取它。代码接受 `enabled`、`disabled`、`auto`；历史测试中的默认 Doubao Vision 模型不支持 `auto`，其他模型的支持情况需单独核实。
+
+### CLI 参数和环境变量
 
 ```bash
-# 使用 Gemini（默认）
-python -m seetouch run "打开抖音" --reasoner gemini
-
-# 使用 Doubao
-python -m seetouch run "打开抖音" --reasoner doubao
+python -m seetouch run --help
+python -m seetouch run "打开设置" --reasoner doubao --max-steps 20 --runs-dir ./runs
 ```
 
-任务执行过程中：
-- 自动截图、推理、执行动作
-- 敏感操作（支付、下单、发送消息）会暂停请求确认
-- 结果保存到 `./runs/<timestamp>/` 目录
+| 设置 | 默认值 / 含义 |
+|---|---|
+| `--reasoner` | `gemini`；也可选 `doubao`，不是环境变量自动选择 |
+| `--serial` / `SEETOUCH_DEVICE_SERIAL` | 指定设备；未指定时由 uiautomator2 连接 |
+| `--max-steps` / `SEETOUCH_MAX_STEPS` | 45 |
+| `--runs-dir` / `SEETOUCH_RUNS_DIR` | `runs` |
+| `SEETOUCH_LOG_LEVEL` | `INFO` |
+| `SEETOUCH_APPLIST_PATH` | PC 应用索引路径，默认 `~/.seetouch/applist.json` |
 
-### 调试器
+已有环境变量优先于 `.env`。Gemini key 按 `GEMINI_API_KEY → VLM_API_KEY` 读取；Doubao 按 `VLM_API_KEY → DOUBAO_API_KEY` 读取。不同厂商凭据不能混用。
 
-图形化调试器支持实时截图显示、单步执行、prompt/模型输出查看：
+`UnifiedConfig` 已存在，但 CLI 仍使用兼容的 `AppSettings` 和各 Reasoner 配置。该类中的额外环境变量并未全部接入运行入口，详见 [技术决策](memory/technical_decisions.md)。
+
+### 应用索引和运行记录
+
+安装 SeeTouch Android APK 后，可从仓库根目录导出手机应用显示名索引：
 
 ```bash
-# 安装调试器依赖
-pip install -e ".[debugger]"
-
-# 启动调试器（浏览器自动打开）
-python -m seetouch debug
-python -m seetouch debug --port 8080   # 指定端口
+python scripts/pull_applist.py
 ```
 
-调试器功能：
-- 📱 **实时截图** — CLICK 标注红点+十字准星，SCROLL 标注轨迹箭头
-- 📝 **完整信息** — Action、Screen Summary、Prompt（可折叠）、Model Output（可折叠）、Token 用量
-- ⏭ **单步执行** — 逐步观察每一步的截图、推理、动作
-- ▶ **连续运行** — 自动执行，支持随时暂停
-- 🕐 **历史回看** — 底部时间线可点击查看任意历史步骤
+脚本默认写入当前目录 `applist.json`，同时同步到 `~/.seetouch/applist.json`。文件通道失败时可显式改用 `--channel logcat`；PC 脚本不会自动从失败的文件通道切换。索引包含应用和设备信息，不应直接公开。
 
----
+每次运行在 `runs/<task_id>/` 保存 `step_001.png` 等截图、`trace.jsonl` 和 `summary.json`。回放是打印已有记录，不会重新操作手机：
 
-## 架构设计
-
-### 目录结构
-
+```bash
+python scripts/replay.py runs/<task_id>
 ```
+
+环境诊断入口为 `python scripts/doctor.py`。它会连接设备，当前仅检查 Doubao 凭据且打印 key 前缀；仅配置 Gemini 时可能报缺少 key，分享输出前应脱敏。
+
+## Web 调试器
+
+```bash
+python -m pip install -e ".[debugger]"
+python -m seetouch debug --port 5000
+```
+
+浏览器访问 `http://localhost:5000`。支持 Step / Run / Pause / Stop、截图动作标注、步骤时间线、模型输入输出、Doubao 返回的推理内容、token 统计和实时日志。
+
+当前调试器固定使用 Doubao；仅设置 `GEMINI_API_KEY` 不能切换后端。服务监听 `0.0.0.0`，允许任意 CORS 来源且没有用户认证；敏感动作确认回调直接返回同意。应仅在受控开发环境运行，避免暴露到不可信网络，不用它执行支付、发消息或删除等敏感任务。
+
+## 架构与动作
+
+```text
 seetouch/
-├── core/           # 主循环、Action、Task、Session
-│   ├── action.py   # 动作协议（CLICK/TYPE/SCROLL/OPEN/WAIT/COMPLETE）
-│   ├── runner.py   # 状态机执行器（start/step/run）
-│   ├── task.py     # 任务定义
-│   └── session.py  # 会话管理 + StepResult 数据类
-├── device/         # 设备控制层
-│   ├── base.py     # DeviceController 抽象接口
-│   └── android/    # uiautomator2 实现
-├── perception/     # 视觉处理
-│   ├── screen.py   # 坐标转换（0-1000 归一化）
-│   └── image.py    # 图像编码
-├── reasoning/      # 推理层
-│   ├── base.py     # Reasoner 抽象接口
-│   ├── doubao.py   # Doubao Vision 实现
-│   ├── gemini.py   # Google Gemini 实现
-│   ├── parser.py   # 模型输出解析器
-│   └── prompts.py  # Prompt 模板
-│   ├── base.py     # Reasoner 抽象接口
-│   ├── doubao.py   # Doubao Vision 实现
-│   └── prompts/    # Prompt 模板
-├── safety/         # 安全防护
-│   └── guard.py    # 敏感动作识别
-├── debugger/       # 图形化调试器
-│   ├── app.py      # Flask + SocketIO 服务
-│   ├── debug_session.py  # 调试会话管理
-│   └── static/     # Web UI（HTML/CSS/JS）
-├── cli/            # 命令行入口
-└── scripts/        # 工具脚本
-    └── doctor.py   # 环境诊断
+├── core/           # Action、Task、Runner、Session、EventBus、异常类型
+├── device/
+│   ├── base.py     # DeviceController Protocol
+│   ├── android/    # PC uiautomator2、AppIndex、AppLauncher
+│   └── android_native/  # Android App 的 Kotlin 桥接适配器
+├── perception/     # screen.py：缩放、坐标换算、图像编码
+├── reasoning/      # base.py、doubao.py、gemini.py、parser.py、prompts.py
+├── safety/         # 关键词规则和确认回调
+├── debugger/       # Flask / SocketIO + 原生 Web UI
+└── cli/            # 命令行组装
+android/            # Kotlin / Compose / Chaquopy App
+scripts/            # doctor.py、pull_applist.py、replay.py
+tests/              # 当前维护的 Python 测试入口
 ```
 
-### 核心概念
+| 动作 | 参数 | 含义 |
+|---|---|---|
+| `CLICK` | `{"point": [x, y]}` | 点击 |
+| `TYPE` | `{"text": "..."}` | 输入文本 |
+| `SCROLL` | `{"start_point": [x, y], "end_point": [x, y]}` | 滑动 |
+| `OPEN` | `{"app_name": "设置"}` | 按本机显示名启动应用 |
+| `BACK` | `{}` | 系统返回 |
+| `WAIT` | `{}` 或 `{"seconds": 1.5}` | 默认 1.5 秒，执行时限制在 0.5–5 秒 |
+| `COMPLETE` | `{}` | 模型声明结束；不是独立验证的成功指标 |
 
-#### 动作协议
+坐标采用 0–1000 归一化；设备层按实际屏幕尺寸换算。Runner 将截图宽度降至最多 720 像素，保持比例，供模型和本地记录使用。
 
-| 动作 | 参数 | 说明 |
-|------|------|------|
-| `CLICK` | `{"point": [x, y]}` | 点击控件（坐标 0-1000） |
-| `TYPE` | `{"text": "..."}` | 输入文本（支持中文） |
-| `SCROLL` | `{"start_point": [x,y], "end_point": [x,y]}` | 滑动 |
-| `OPEN` | `{"app_name": "抖音"}` | 启动应用 |
-| `WAIT` | `{"seconds": 1.5}` | 等待加载（0.5-5 秒） |
-| `COMPLETE` | `{}` | 任务完成 |
+OPEN 顺序为学习缓存、本机索引归一化精确匹配、唯一子串匹配、候选反馈；索引缺失或累计多次未命中后回桌面视觉查找。内部调用保留已安装包名直通，模型提示要求输出显示名。旧静态映射表已退出启动路径。
 
-#### OPEN 启动策略
+## 已知限制与数据处理
 
-以应用名为一等公民（VLM 输出桌面显示名，不输出包名），基于本机应用索引解析：
+- **完成状态可能误报**：两个 Reasoner 在捕获 API 异常时均返回 `COMPLETE`，Runner 随后会记为 completed；这是待修问题。模型输出解析失败才降级为 `WAIT`，不能把它描述成可靠的 API 重试。
+- Guard 依赖任务文本和模型摘要中的关键词，可能漏判；各入口的确认方式不同，见首表。
+- 截图、任务指令及历史摘要会发送给所选云端模型；本地截图、日志、trace 也可能包含聊天内容、账号或输入文本，当前没有自动脱敏。
+- Android key 使用普通 SharedPreferences 保存；备份规则和 exported 诊断入口尚待加固，见 [隐私审计](docs/privacy-audit.md)。
+- 暂未实现通用 OpenAI 后端入口、多轮澄清、用户偏好、Playbook、Web/iOS/桌面控制；Python Protocol 提供扩展点。
 
-```
-① learned cache  — 已学习的 请求名→包名 映射（持久化）
-② 索引精确匹配   — 应用显示名归一化后完全相等
-③ 索引强模糊     — 唯一子串命中（如 "哔哩"→"哔哩哔哩"）直接启动并学习
-④ 候选反馈       — 歧义/未命中时把相似应用名反馈给 VLM，让它重选或换关键词
-⑤ 视觉兜底       — 索引不可用或多次反馈仍未命中时，回桌面视觉识别图标点击
-```
-
-索引数据源：on-device 走 PackageManager（DeviceBridge），PC 端读 helper 导出的
-`~/.seetouch/applist.json`（`python scripts/pull_applist.py` 自动同步）。
-
-> 视觉兜底成功后自动学习映射，持久化到 `~/.seetouch/learned_apps.json`
-
----
-
-## 开发
-
-### 安装开发依赖
+## 开发与验证
 
 ```bash
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
+python -m pytest tests -q
+python -m ruff check seetouch
 ```
 
-### 运行测试
+2026-10-12 在上述代码基线上：`tests/` **88 passed**，`ruff check seetouch` 通过。扩大到 `ruff check seetouch tests scripts` 时有 4 项既存测试文件 lint 问题。上述结果来自离线单元 / mock 测试，不证明真实模型服务或手机任务成功。
 
-```bash
-# 全部测试（83 个单元测试）
-pytest tests/
+早期记录包含 Doubao + PC 路径的真机试跑，以及 Android 模拟器闭环；本轮未重新构建 APK、连接手机或调用真实模型。历史结果见 [开发历程](memory/development_history.md)，不能作为当前 Gemini 或 Android 真机回归结论。
 
-# 单个模块
-pytest tests/unit/test_parser.py -v
+贡献方式见 [CONTRIBUTING.md](CONTRIBUTING.md)，近期工作见 [路线图](memory/future_roadmap.md)。问题反馈：[GitHub Issues](https://github.com/seetouch-agent/SeeTouch/issues)。
 
-# 覆盖率报告
-pytest --cov=seetouch --cov-report=html
-```
+## 许可声明
 
-### 代码规范
-
-项目使用 Ruff 进行代码检查：
-```bash
-ruff check seetouch/
-ruff format seetouch/
-```
-
----
-
-## 真机验证
-
-**测试设备**: Xiaomi rubens / Android 12 / 1440×3200 / 447 已装应用
-
-| 任务 | 步数 | 耗时 | 结果 |
-|------|------|------|------|
-| 打开抖音 | 2 | 11s | ✓ |
-| 在哔哩哔哩搜索采莲曲 | 6 | 27s | ✓ |
-| 视觉兜底（桌面文件夹内 app） | 8 | ~45s | ✓ |
-
----
-
-## 性能与成本
-
-### thinking_mode 对比
-
-| 模式 | 步均耗时 | 准确率 | 适用场景 |
-|------|---------|--------|---------|
-| `disabled` | 3-5s | 中 | 简单任务、成本敏感 |
-| `enabled` | 7-12s | 高 | 复杂场景（广告识别、小控件定位） |
-
-> 默认 `enabled`（准确率优先），可通过 `SEETOUCH_THINKING_MODE` 环境变量调整
-
----
-
-## 路线图
-
-### 已完成 ✓
-- [x] uiautomator2 设备控制层
-- [x] Doubao Vision 推理引擎
-- [x] 五级 OPEN 启动策略 + 视觉兜底
-- [x] 敏感动作拦截
-- [x] 死循环检测（连续 3 步相同动作自动中止）
-- [x] 真机闭环验证（Xiaomi / MIUI）
-- [x] 图形化调试器（Web UI + 单步执行 + 实时截图标注）
-
-### 进行中 🚧
-- [ ] 更多 VLM 后端支持（Claude、GPT-4V、本地模型）
-- [ ] 多设备并行执行
-
-### 未来计划 💡
-- [ ] **on-device Android APP** — 独立运行在手机上，不依赖 PC
-  - 使用 Android Accessibility Service 替代 uiautomator2
-  - 端侧模型推理或云端 API
-- [ ] 跨平台扩展（Web 自动化、桌面 GUI）
-- [ ] 任务编排 DSL（定义多步工作流）
-
----
-
-## 贡献指南
-
-欢迎提交 Issue 和 Pull Request！详见 [CONTRIBUTING.md](CONTRIBUTING.md)
-
-### 快速贡献流程
-
-1. Fork 本仓库
-2. 创建特性分支：`git checkout -b feature/amazing-feature`
-3. 提交更改：`git commit -m 'feat: add amazing feature'`
-4. 推送分支：`git push origin feature/amazing-feature`
-5. 提交 Pull Request
-
----
-
-## 许可证
-
-本项目采用 [Apache License 2.0](LICENSE) 开源协议。
-
----
-
-## 致谢
-
-- [uiautomator2](https://github.com/openatx/uiautomator2) — Android 自动化核心
-- [Doubao Vision](https://www.volcengine.com/docs/82379/1298454) — 视觉理解引擎
-
----
-
-## 联系方式
-
-- **Issues**: [GitHub Issues](https://github.com/seetouch-agent/seetouch/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/seetouch-agent/seetouch/discussions)
-
----
-
-<div align="center">
-
-**如果本项目对你有帮助，请给一个 ⭐️ Star 支持！**
-
-</div>
+`pyproject.toml` 声明 Apache-2.0，但当前工作树中缺少 `LICENSE` 正文。应由维护者确认并补齐正式许可证文件；本次文档审计不改变许可选择。
