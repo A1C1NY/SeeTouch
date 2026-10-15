@@ -77,6 +77,45 @@ python -m seetouch run "打开设置" --reasoner doubao
 
 `SEETOUCH_THINKING_MODE` 控制 Doubao，Gemini 适配器不读取它。代码接受 `enabled`、`disabled`、`auto`；历史测试中的默认 Doubao Vision 模型不支持 `auto`，其他模型的支持情况需单独核实。
 
+### OpenAI / OpenAI 兼容中转站（CLI）
+
+使用支持图片输入的模型，在本地 `.env` 中配置：
+
+```dotenv
+OPENAI_API_KEY=replace-with-your-key
+OPENAI_MODEL_ID=replace-with-your-vision-model-id
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_API_MODE=chat_completions
+OPENAI_TIMEOUT=60
+OPENAI_MAX_RETRIES=1
+```
+
+中转站请填写服务商提供的 API 基础地址（常见为 `https://your-host/v1`），
+不要包含末尾的 `/chat/completions` 或 `/responses`；程序会按协议自动追加。
+`OPENAI_API_MODE=chat_completions` 使用 Chat Completions；仅支持 Responses 的模型请设置
+`OPENAI_API_MODE=responses`。不根据模型名称猜测协议，不自动切换协议或重复计费。
+Key 和模型 ID 必须来自同一个服务商；只支持文本的模型不适用于此入口。
+第三方即使暴露 Responses 路由，也可能限制为特定客户端；403 应按服务商要求处理。
+此适配器不发送豆包的 `thinking` 参数，也不读取 `VLM_API_KEY`。
+
+```powershell
+python -m seetouch run "打开设置" --reasoner openai --serial e1e6b31b --max-steps 3
+```
+
+调试顺序：
+
+1. `python -m seetouch run --help` 确认 `--reasoner` 包含 `openai`。
+2. 先用上面的小步数命令测试。日志应显示 `provider=openai`、模型名称和 HTTP 请求状态。
+3. 401/403 检查 Key 和权限；404 检查基础地址、模型 ID，以及服务是否提供 Chat Completions；
+   400 检查模型是否支持图片和 base64 data URL；429 检查配额或限流。
+4. 超时可增加 `OPENAI_TIMEOUT`（每次请求的秒数）；排查重试时设 `OPENAI_MAX_RETRIES=0`。
+5. 查看 `runs/<task_id>/step_001.png`、`trace.jsonl` 和 `summary.json`，或执行
+   `python scripts/replay.py runs/<task_id>`。输出解析失败会降级 WAIT；API 错误、空文本或
+   输出截断会终止任务，结果为 `completed=False`，而不会误报完成。
+
+已有进程环境变量优先于 `.env`；修改 `.env` 后重新启动命令。截图和任务会发送到配置的服务商。
+分享日志和运行产物前请去除密钥及屏幕中的私人信息。Web 调试器和 Android App 仍固定使用 Doubao。
+
 ### CLI 参数和环境变量
 
 ```bash
