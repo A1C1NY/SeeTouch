@@ -8,7 +8,7 @@ SeeTouch 通过屏幕截图和视觉语言模型（VLM）理解手机界面，�
 
 | 入口 | 设备控制 | 当前推理后端 | 敏感动作确认 |
 |---|---|---|---|
-| PC 命令行 `run` | ADB + uiautomator2 | 默认 Gemini，可用 `--reasoner doubao` 切换 | 命中关键词规则后在终端确认 |
+| PC 命令行 `run` | ADB + uiautomator2 | 默认 Gemini，可用 `--reasoner doubao/openai` 切换 | 命中关键词规则后在终端确认 |
 | PC Web 调试器 `debug` | ADB + uiautomator2 | 固定 Doubao，尚无模型选择参数 | **当前自动批准，尚未接入交互确认** |
 | Android 独立 App | 无障碍服务 + Kotlin/Python 桥接 | 固定 Doubao，通过 App 设置配置 | App 内确认，5 分钟超时拒绝 |
 
@@ -61,6 +61,7 @@ python -m seetouch run "在哔哩哔哩搜索采莲曲" --reasoner gemini
 ```
 
 配置与实现边界见 [Gemini 指南](docs/gemini-integration.md)。
+后缀采用--openai则可以兼容采用openai调用结构的大部分模型
 
 ### Doubao：CLI 可选，调试器和 Android App 使用
 
@@ -99,7 +100,7 @@ Key 和模型 ID 必须来自同一个服务商；只支持文本的模型不适
 此适配器不发送豆包的 `thinking` 参数，也不读取 `VLM_API_KEY`。
 
 ```powershell
-python -m seetouch run "打开设置" --reasoner openai --serial e1e6b31b --max-steps 3
+python -m seetouch run "打开设置" --reasoner openai --serial xxxxxx(设备序列号) --max-steps 3
 ```
 
 调试顺序：
@@ -204,7 +205,7 @@ OPEN 顺序为学习缓存、本机索引归一化精确匹配、唯一子串匹
 - Guard 依赖任务文本和模型摘要中的关键词，可能漏判；各入口的确认方式不同，见首表。
 - 截图、任务指令及历史摘要会发送给所选云端模型；本地截图、日志、trace 也可能包含聊天内容、账号或输入文本，当前没有自动脱敏。
 - Android key 使用普通 SharedPreferences 保存；备份规则和 exported 诊断入口尚待加固，见 [隐私审计](docs/privacy-audit.md)。
-- 暂未实现通用 OpenAI 后端入口、多轮澄清、用户偏好、Playbook、Web/iOS/桌面控制；Python Protocol 提供扩展点。
+- 暂未实现、多轮澄清、用户偏好、Playbook、Web/iOS/桌面控制；Python Protocol 提供扩展点。
 
 ## 开发与验证
 
