@@ -152,3 +152,12 @@ def test_responses_incomplete_fails(status):
 def test_invalid_api_mode():
     with pytest.raises(ValueError, match="OPENAI_API_MODE"):
         OpenAIConfig("test", "vision", api_mode="unknown")
+
+
+def test_responses_rejects_old_sdk_before_starting_task():
+    client = SimpleNamespace(chat=Mock(), close=Mock())
+    with patch("openai.OpenAI", return_value=client):
+        with pytest.raises(RuntimeError, match="openai>=1.66.0"):
+            OpenAIReasoner(OpenAIConfig("test", "vision", api_mode="responses"))
+    client.close.assert_called_once()
+    client.chat.completions.create.assert_not_called()

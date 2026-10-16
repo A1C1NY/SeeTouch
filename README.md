@@ -79,6 +79,9 @@ python -m seetouch run "打开设置" --reasoner doubao
 
 ### OpenAI / OpenAI 兼容中转站（CLI）
 
+PC 端要求 `openai>=1.66.0`，以支持 Responses 和 `output_text`。已有环境请重新执行
+`python -m pip install -e .` 更新依赖；仅更新源码不会升级 SDK。
+
 使用支持图片输入的模型，在本地 `.env` 中配置：
 
 ```dotenv

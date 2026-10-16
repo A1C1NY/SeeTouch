@@ -69,6 +69,9 @@ class OpenAIReasoner:
             timeout=self._config.timeout,
             max_retries=self._config.max_retries,
         )
+        if self._config.api_mode == "responses" and not hasattr(self._client, "responses"):
+            self._client.close()
+            raise RuntimeError("Responses requires openai>=1.66.0; upgrade the OpenAI SDK")
 
     def predict(
         self, instruction: str, screenshot: Image.Image, history: list[StepRecord]
